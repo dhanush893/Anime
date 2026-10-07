@@ -49,3 +49,7 @@ The easiest setup is to serve the frontend from the same Flask service. If the f
 ## Security
 
 The Telegram bot token is a server secret. Use environment variables only. Do not commit it to the repository.
+
+Friend scores are now calculated on the server from the submitted answer choices. The answer key is never exposed through a public API endpoint.
+
+The challenge stores the creator's 10 selected answers and the backend compares friend answers against those answers before writing the leaderboard result.
