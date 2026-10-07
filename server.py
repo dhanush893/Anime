@@ -21,7 +21,11 @@ def db():
     c.row_factory = sqlite3.Row
     c.execute("""CREATE TABLE IF NOT EXISTS challenges(
         id TEXT PRIMARY KEY, creator TEXT NOT NULL, title TEXT NOT NULL,
-        answers TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)""")
+        anime TEXT DEFAULT 'Anime', answers TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)""")
+    cols = [x["name"] for x in c.execute("PRAGMA table_info(challenges)").fetchall()]
+    if "anime" not in cols:
+        c.execute("ALTER TABLE challenges ADD COLUMN anime TEXT DEFAULT 'Anime'")
     c.execute("""CREATE TABLE IF NOT EXISTS results(
         id INTEGER PRIMARY KEY AUTOINCREMENT, challenge_id TEXT, name TEXT,
         score INTEGER, total INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)""")
@@ -54,22 +58,25 @@ def health():
 @app.post("/api/challenges")
 def create_challenge():
     data = request.get_json(silent=True) or {}
-    name, title, answers = str(data.get("name","")).strip(), str(data.get("title","")).strip(), data.get("answers")
-    if not name or not isinstance(answers, list) or len(answers) != 10:
+    name = str(data.get("name","")).strip()
+    title = str(data.get("title","")).strip()
+    anime = str(data.get("anime","Anime")).strip()
+    answers = data.get("answers")
+    if not name or not anime or not isinstance(answers, list) or len(answers) != 10:
         return jsonify({"error":"Invalid challenge data"}), 400
     cid = secrets.token_urlsafe(7)
     c = db()
-    c.execute("INSERT INTO challenges(id,creator,title,answers) VALUES(?,?,?,?)",
-              (cid, name[:40], (title or "How well do you know my anime taste?")[:100], ",".join(map(str,answers))))
+    c.execute("INSERT INTO challenges(id,creator,title,anime,answers) VALUES(?,?,?,?,?)",
+              (cid, name[:40], (title or f"How well do you know {anime}?")[:100], anime[:60], ",".join(map(str,answers))))
     c.commit(); c.close()
-    notify(f"⚔️ ANIME BATTLE\n\n{name[:40]} created a new anime challenge.\nChallenge ID: {cid}")
-    return jsonify({"id": cid})
+    notify(f"⚔️ ANIME BATTLE\n\n{name[:40]} created a {anime} challenge.\nChallenge ID: {cid}")
+    return jsonify({"id": cid, "anime": anime})
 
 @app.get("/api/challenges/<cid>")
 def get_challenge(cid):
-    c=db(); row=c.execute("SELECT id,creator,title,answers FROM challenges WHERE id=?",(cid,)).fetchone(); c.close()
+    c=db(); row=c.execute("SELECT id,creator,title,anime FROM challenges WHERE id=?",(cid,)).fetchone(); c.close()
     if not row: return jsonify({"error":"Challenge not found"}),404
-    return jsonify({"id":row["id"],"creator":row["creator"],"title":row["title"]})
+    return jsonify({"id":row["id"],"creator":row["creator"],"title":row["title"],"anime":row["anime"]})
 
 @app.get("/api/challenges/<cid>/answer-key")
 def answer_key(cid):
@@ -110,7 +117,7 @@ def bot_loop():
                 msg=u.get("message",{})
                 chat=msg.get("chat",{})
                 if msg.get("text","").startswith("/start"):
-                    tg("sendMessage",{"chat_id":chat.get("id"),"text":"⚔️ Anime Battle Bot\nCreate an Anime Battle on the website and share it with your friends.\n\nCommands:\n/stats — show recent challenge count"})
+                    tg("sendMessage",{"chat_id":chat.get("id"),"text":"⚔️ Anime Battle Bot\nCreate an Anime Battle on the website and share it with your friends.\n\nCommands:\n/stats — show challenge count"})
                 elif msg.get("text","").startswith("/stats"):
                     c=db(); n=c.execute("SELECT COUNT(*) FROM challenges").fetchone()[0]; r=c.execute("SELECT COUNT(*) FROM results").fetchone()[0]; c.close()
                     tg("sendMessage",{"chat_id":chat.get("id"),"text":f"📊 Anime Battle\nChallenges: {n}\nResults: {r}"})
