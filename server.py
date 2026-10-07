@@ -78,28 +78,47 @@ def get_challenge(cid):
     if not row: return jsonify({"error":"Challenge not found"}),404
     return jsonify({"id":row["id"],"creator":row["creator"],"title":row["title"],"anime":row["anime"]})
 
-@app.get("/api/challenges/<cid>/answer-key")
-def answer_key(cid):
-    c=db(); row=c.execute("SELECT answers FROM challenges WHERE id=?",(cid,)).fetchone(); c.close()
-    if not row: return jsonify({"error":"Challenge not found"}),404
-    return jsonify({"answers":[int(x) for x in row["answers"].split(",")]})
-
 @app.post("/api/challenges/<cid>/results")
 def result(cid):
-    data=request.get_json(silent=True) or {}
-    name=str(data.get("name","")).strip()
-    score=int(data.get("score",-1))
-    total=int(data.get("total",10))
-    if not name or score < 0 or score > total: return jsonify({"error":"Invalid result"}),400
-    c=db()
-    exists=c.execute("SELECT id FROM challenges WHERE id=?",(cid,)).fetchone()
-    if not exists: c.close(); return jsonify({"error":"Challenge not found"}),404
-    c.execute("INSERT INTO results(challenge_id,name,score,total) VALUES(?,?,?,?)",(cid,name[:40],score,total))
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name", "")).strip()
+    submitted = data.get("answers")
+    if not name or not isinstance(submitted, list) or len(submitted) != 10:
+        return jsonify({"error": "Invalid result data"}), 400
+    try:
+        submitted = [int(x) for x in submitted]
+    except (TypeError, ValueError):
+        return jsonify({"error": "Answers must be numbers"}), 400
+    if any(x < 0 or x > 3 for x in submitted):
+        return jsonify({"error": "Invalid answer choice"}), 400
+
+    c = db()
+    row = c.execute("SELECT answers FROM challenges WHERE id=?", (cid,)).fetchone()
+    if not row:
+        c.close()
+        return jsonify({"error": "Challenge not found"}), 404
+
+    correct = [int(x) for x in row["answers"].split(",")]
+    score = sum(a == b for a, b in zip(submitted, correct))
+    total = len(correct)
+    c.execute(
+        "INSERT INTO results(challenge_id,name,score,total) VALUES(?,?,?,?)",
+        (cid, name[:40], score, total)
+    )
     c.commit()
-    rows=c.execute("SELECT name,score,total FROM results WHERE challenge_id=? ORDER BY score DESC, id ASC LIMIT 50",(cid,)).fetchall()
+    rows = c.execute(
+        "SELECT name,score,total FROM results WHERE challenge_id=? ORDER BY score DESC, id ASC LIMIT 50",
+        (cid,)
+    ).fetchall()
     c.close()
-    notify(f"🏆 ANIME BATTLE RESULT\n{name[:40]} scored {score}/{total}\nChallenge: {cid}")
-    return jsonify({"leaderboard":[dict(x) for x in rows]})
+
+    notify(f"🏆 ANIME BATTLE RESULT\\n{name[:40]} scored {score}/{total}\\nChallenge: {cid}")
+    return jsonify({
+        "score": score,
+        "total": total,
+        "percentage": round(score / total * 100),
+        "leaderboard": [dict(x) for x in rows]
+    })
 
 @app.get("/api/challenges/<cid>/leaderboard")
 def leaderboard(cid):
