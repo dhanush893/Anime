@@ -64,6 +64,12 @@ def get_challenge(cid):
     if not row: return jsonify({"error":"Challenge not found"}),404
     return jsonify({"id":row["id"],"creator":row["creator"],"title":row["title"]})
 
+@app.get("/api/challenges/<cid>/answer-key")
+def answer_key(cid):
+    c=db(); row=c.execute("SELECT answers FROM challenges WHERE id=?",(cid,)).fetchone(); c.close()
+    if not row: return jsonify({"error":"Challenge not found"}),404
+    return jsonify({"answers":[int(x) for x in row["answers"].split(",")]})
+
 @app.post("/api/challenges/<cid>/results")
 def result(cid):
     data=request.get_json(silent=True) or {}
