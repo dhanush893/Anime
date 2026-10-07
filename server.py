@@ -9,6 +9,13 @@ PORT = int(os.getenv("PORT", "10000"))
 
 app = Flask(__name__, static_folder=".", static_url_path="")
 
+@app.after_request
+def cors(response):
+    response.headers["Access-Control-Allow-Origin"] = os.getenv("FRONTEND_ORIGIN", "*")
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+    return response
+
 def db():
     c = sqlite3.connect(DB)
     c.row_factory = sqlite3.Row
